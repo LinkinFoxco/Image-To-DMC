@@ -8,37 +8,43 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-class DMCRGB
-{
-    public DMCRGB(int indexIn, Color RGBIn)
-    {
-        index = indexIn;
-        RGB = RGBIn;
-    }
-    public int index;
-    public Color RGB;
-}
-
 namespace Image_To_DMC
 {
     public partial class Form1 : Form
     {
+        int ClosestColor(List<Color> colors, Color target)
+        {
+            var colorDiffs = colors.Select(n => ColorDiff(n, target)).Min(n => n);
+            return colors.FindIndex(n => ColorDiff(n, target) == colorDiffs);
+        }
+        int ColorDiff(Color c1, Color c2)
+        {
+            return (int)Math.Sqrt((c1.R - c2.R) * (c1.R - c2.R)
+                                   + (c1.G - c2.G) * (c1.G - c2.G)
+                                   + (c1.B - c2.B) * (c1.B - c2.B));
+        }
+
+
         public Form1()
         {
             InitializeComponent();
             progressBar1.Visible = false;
+            for (int i = 100; i < 1001; i += 100)
+            {
+                PearlAmounts.Add(i);
+            }
+            for (int i = 1500; i < 10001; i += 500)
+            {
+                PearlAmounts.Add(i);
+            }
+            for (int i = 12500; i < 50001; i += 2500)
+            {
+                PearlAmounts.Add(i);
+            }
         }
-
-        private void openFileDialog1_FileOk(object sender, CancelEventArgs e)
-        {
-
-        }
-
-        private void button1_Click(object sender, EventArgs e)
-        {
-
-            var filePath = string.Empty;
-            Dictionary<int, Color> DMCDic = new Dictionary<int, Color> { {208,Color.FromArgb(148,91,128)},
+        Image imageDeBase = null;
+        string filePath = string.Empty;
+        Dictionary<int, Color> DMCDic = new Dictionary<int, Color> { {208,Color.FromArgb(148,91,128)},
             {209,Color.FromArgb(206,148,186)},
             {210,Color.FromArgb(236,207,225)},
             {211,Color.FromArgb(243,218,228)},
@@ -398,6 +404,16 @@ namespace Image_To_DMC
             {3790,Color.FromArgb(140,117,109)},
             {3799,Color.FromArgb(81,76,83)},
             };
+        List<int> PearlAmounts = new List<int> { };
+
+
+        private void openFileDialog1_FileOk(object sender, CancelEventArgs e)
+        {
+
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
 
             using (OpenFileDialog openFileDialog = new OpenFileDialog())
             {
@@ -405,105 +421,144 @@ namespace Image_To_DMC
                 openFileDialog.Filter = "Image Files(*.BMP;*.JPG;*.GIF;*.PNG;*.TIFF)|*.BMP;*.JPG;*.GIF;*.PNG;*.TIFF|All files (*.*)|*.*";
                 openFileDialog.FilterIndex = 1;
                 openFileDialog.RestoreDirectory = true;
-                
+
                 if (openFileDialog.ShowDialog() == DialogResult.OK)
                 {
                     filePath = openFileDialog.FileName;
-                    var imageDeBase = Image.FromFile(filePath);
-                    
-                    //faire un Resize par rapport a un nombre de perle max voulu
-                    int w = imageDeBase.Width;
-                    int h = imageDeBase.Height;
-                    var imageReSize = new Bitmap(imageDeBase);//,w,h);
-                    progressBar1.Visible = true;
-                    progressBar1.Minimum = 1;
-                    progressBar1.Maximum = w*h*3;
-                    progressBar1.Value = 1;
-                    progressBar1.Step = 1;
+                    imageDeBase = Image.FromFile(filePath);
+                    var WidthImage = imageDeBase.Width;
+                    var HeightImage = imageDeBase.Height;
+                    float ratio = (float)WidthImage / (float)HeightImage;
 
-                    List<Color> ListRGB = new List<Color>(w*h);
-                    for (int y = 0; y < h; y++)
+                    ComboboxItem currentItem = new ComboboxItem { };
+                    comboBox1.Items.Clear();
+                    for (int i = 0; i< PearlAmounts.Count; i++)
                     {
-                        for (int x = 0; x < w; x++)
-                        {
-                            ListRGB.Add(imageReSize.GetPixel(x, y));
-                            progressBar1.PerformStep();
-                        }
+                        var tempItem = new Size((int)Math.Sqrt(PearlAmounts[i] * ratio),0);
+                        tempItem.Height = (int)(tempItem.Width / ratio);
+                        currentItem.Value = tempItem;
+                        currentItem.Text = PearlAmounts[i] + " Perles (" + currentItem.Value.Width + "x" + currentItem.Value.Height + ")" ;
+                        comboBox1.Items.Add(currentItem);
                     }
-
-                    //matchs couleurs approximativement
-                    List<DMCRGB> DMCList = new List<DMCRGB> (ListRGB.Count);
-                    var ColorsDMC = DMCDic.Values.ToList();
-                    foreach (Color currentColor in ListRGB)
-                    {
-                        var currentIndex = ClosestColor(ColorsDMC, currentColor);
-                        DMCList.Add(new DMCRGB(DMCDic.ElementAt(currentIndex).Key, DMCDic.ElementAt(currentIndex).Value));
-                        progressBar1.PerformStep();
-                    }
-
-                    //generation image finale
-                    Bitmap imageFinale = new Bitmap(w*40, h*40);
-                    using (Graphics g = Graphics.FromImage(imageFinale))
-                    {
-                        StringFormat formatString = new StringFormat();
-                        formatString.Alignment = StringAlignment.Center;
-                        formatString.LineAlignment = StringAlignment.Center;
-                        var fontSize = 10;
-                        Font fontString = new Font("Arial", fontSize); // check font avec double ecriture
-                        SolidBrush brushString = new SolidBrush(Color.Black);
-                        SolidBrush brushRectangle = new SolidBrush(Color.White);
-                        Pen penRectangle = new Pen(Color.Black, 3);
-                        Pen penOutline = new Pen(Color.White, 2);
-
-                        //List<RectangleF> rects = new List<RectangleF> { };
-                        for (int hF = 0; hF < h; hF++)
-                        {
-                            for (int wF = 0; wF < w; wF++)
-                            {
-                                var tempRect = new Rectangle(wF * 40, hF * 40, 40, 40);
-                                var tempDMCRGB = DMCList[hF * w + wF];
-                                brushRectangle.Color = tempDMCRGB.RGB;
-                                g.FillRectangle(brushRectangle,tempRect);
-
-                                ////outline
-                                //System.Drawing.Drawing2D.GraphicsPath p = new System.Drawing.Drawing2D.GraphicsPath();
-                                //p.AddString(
-                                //    tempDMCRGB.index.ToString(),             // text to draw
-                                //    FontFamily.GenericSansSerif,  // or any other font family
-                                //    (int)FontStyle.Regular,      // font style (bold, italic, etc.)
-                                //    g.DpiY * fontSize / 72,       // em size
-                                //    tempRect,              // location where to draw text
-                                //    formatString);          // set options here (e.g. center alignment)
-                                //g.DrawPath(penOutline, p);
-
-                                g.DrawString(tempDMCRGB.index.ToString(), fontString, brushString, tempRect, formatString); 
-                                g.DrawRectangle(penRectangle, tempRect);
-
-                                progressBar1.PerformStep();
-                                //rects.Add(tempRect);
-                            }
-                        }
-                        //g.FillRectangles(BrushRectangle, rects.ToArray());
-                    }
-                    pictureBox1.Image = imageFinale;
-                    string tempExtension = System.IO.Path.GetExtension(filePath);
-                    imageFinale.Save(System.IO.Path.ChangeExtension(filePath,null) + "DMC" + tempExtension);
-                    progressBar1.Step = 1;
-                    progressBar1.Value = 1;
+                    comboBox1.Enabled = true;
                 }
             }
+
         }
 
-        int ClosestColor(List<Color> colors, Color target)
+        private void button2_Click(object sender, EventArgs e)
         {
-            var colorDiffs = colors.Select(n => ColorDiff(n, target)).Min(n => n);
-            return colors.FindIndex(n => ColorDiff(n, target) == colorDiffs);
+            var test = (ComboboxItem)comboBox1.SelectedItem;
+            var newSize = test.Value;
+            var imageReSize = new Bitmap(imageDeBase, newSize.Width, newSize.Height);
+            int w = imageReSize.Width;
+            int h = imageReSize.Height;
+            progressBar1.Visible = true;
+            progressBar1.Minimum = 1;
+            progressBar1.Maximum = w * h * 3;
+            progressBar1.Value = 1;
+            progressBar1.Step = 1;
+
+            List<Color> ListRGB = new List<Color>(w * h);
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    ListRGB.Add(imageReSize.GetPixel(x, y));
+                    progressBar1.PerformStep();
+                }
+            }
+
+            //matchs couleurs approximativement
+            List<DMCRGB> DMCList = new List<DMCRGB>(ListRGB.Count);
+            var ColorsDMC = DMCDic.Values.ToList();
+            foreach (Color currentColor in ListRGB)
+            {
+                var currentIndex = ClosestColor(ColorsDMC, currentColor);
+                DMCList.Add(new DMCRGB(DMCDic.ElementAt(currentIndex).Key, DMCDic.ElementAt(currentIndex).Value));
+                progressBar1.PerformStep();
+            }
+
+            //generation image finale
+            Bitmap imageFinale = new Bitmap(w * 40, h * 40);
+            using (Graphics g = Graphics.FromImage(imageFinale))
+            {
+                StringFormat formatString = new StringFormat();
+                formatString.Alignment = StringAlignment.Center;
+                formatString.LineAlignment = StringAlignment.Center;
+                var fontSize = 10;
+                Font fontString = new Font("Arial", fontSize);
+                SolidBrush brushString = new SolidBrush(Color.Black);
+                SolidBrush brushRectangle = new SolidBrush(Color.White);
+                Pen penRectangle = new Pen(Color.Black, 3);
+                Pen penOutline = new Pen(Color.White, 2);
+
+                for (int hF = 0; hF < h; hF++)
+                {
+                    for (int wF = 0; wF < w; wF++)
+                    {
+                        var tempRect = new Rectangle(wF * 40, hF * 40, 40, 40);
+                        var tempDMCRGB = DMCList[hF * w + wF];
+                        brushRectangle.Color = tempDMCRGB.RGB;
+                        g.FillRectangle(brushRectangle, tempRect);
+
+                        ////outline
+                        //System.Drawing.Drawing2D.GraphicsPath p = new System.Drawing.Drawing2D.GraphicsPath();
+                        //p.AddString(
+                        //    tempDMCRGB.index.ToString(),             // text to draw
+                        //    FontFamily.GenericSansSerif,  // or any other font family
+                        //    (int)FontStyle.Regular,      // font style (bold, italic, etc.)
+                        //    g.DpiY * fontSize / 72,       // em size
+                        //    tempRect,              // location where to draw text
+                        //    formatString);          // set options here (e.g. center alignment)
+                        //g.DrawPath(penOutline, p);
+
+                        g.DrawString(tempDMCRGB.index.ToString(), fontString, brushString, tempRect, formatString);
+                        g.DrawRectangle(penRectangle, tempRect);
+
+                        progressBar1.PerformStep();
+                    }
+                }
+            }
+            pictureBox1.Image = imageFinale;
+            string tempExtension = System.IO.Path.GetExtension(filePath);
+            imageFinale.Save(System.IO.Path.ChangeExtension(filePath, null) + "DMC" + tempExtension);
+            progressBar1.Step = 1;
+            progressBar1.Value = 1;
+            progressBar1.Visible = false;
         }
-        int ColorDiff(Color c1, Color c2)
+
+        private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
-            return (int)Math.Sqrt((c1.R - c2.R) * (c1.R - c2.R)
-                                   + (c1.G - c2.G) * (c1.G - c2.G)
-                                   + (c1.B - c2.B) * (c1.B - c2.B));
+            button2.Enabled = true;
+
+            //var test3 = (ComboboxItem)comboBox1.SelectedItem;
+            //var test5 = test3.Value.Width;
+            //var test4 = comboBox1.Items; // devient uniquement la dernière value why ?
+            //var newSize = (ComboboxItem)comboBox1.Items[comboBox1.SelectedIndex];
         }
+
+    }
+}
+
+public class DMCRGB
+{
+    public DMCRGB(int indexIn, Color RGBIn)
+    {
+        index = indexIn;
+        RGB = RGBIn;
+    }
+    public int index;
+    public Color RGB;
+}
+
+public class ComboboxItem
+{
+    public string Text { get; set; }
+    public Size Value { get; set; }
+
+    public override string ToString()
+    {
+        return Text;
     }
 }
